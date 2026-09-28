@@ -53,17 +53,17 @@ FastAPI 自动生成 `/openapi.json`、`/docs`。业务路径如下，具体请�
 | 查看当前人员 | `GET /auth/me` |
 | 校验令牌 | `POST /oauth/introspect` |
 | 查询人员 | `GET /people`、`GET /people/{person_id}` |
-| 创建单据 | `POST /leave-requests` |
-| 列表与详情 | `GET /leave-requests`、`GET /leave-requests/{request_id}` |
-| 修改待审批单据 | `PATCH /leave-requests/{request_id}` |
-| 审批或驳回 | `POST /leave-requests/{request_id}/decision` |
-| 撤回 | `POST /leave-requests/{request_id}/withdraw` |
+| 创建单据 | `POST /leaves` |
+| 列表与详情 | `GET /leaves`、`GET /leaves/{leave_id}` |
+| 修改待审批单据 | `PATCH /leaves/{leave_id}` |
+| 审批或驳回 | `POST /leaves/{leave_id}/decision` |
+| 撤回 | `POST /leaves/{leave_id}/withdraw` |
 
 人员目录需要有效访问令牌。列表支持基础分页；单据列表至少支持状态过滤和分页，且始终先施加当前用户的可见性规则。
 
 ### MCP
 
-在 `/mcp` 提供 Streamable HTTP。使用 Python MCP SDK 挂载到同一 ASGI 应用，并正确管理其生命周期。提供与 HTTP 能力对应的工具：`sso_login`、`sso_refresh`、`sso_logout`、`sso_validate`、`list_people`、`get_person`、`create_leave_request`、`list_leave_requests`、`get_leave_request`、`update_leave_request`、`decide_leave_request`、`withdraw_leave_request`。`sso_login` 和 `sso_refresh` 可在无 Bearer 令牌时调用，工具参数包含测试 OAuth 客户端凭据及账号密码或刷新令牌；其余工具通过 MCP HTTP 请求的 Bearer 令牌识别人员，并复用 HTTP 的鉴权和 ACL。`sso_validate` 校验当前 Bearer 令牌。
+在 `/mcp` 提供 Streamable HTTP。使用 Python MCP SDK 挂载到同一 ASGI 应用，并正确管理其生命周期。提供与 HTTP 能力对应的工具：`sso_login`、`sso_refresh`、`sso_logout`、`sso_validate`、`list_people`、`get_person`、`create_leave`、`list_leaves`、`get_leave`、`update_leave`、`decide_leave`、`withdraw_leave`。`sso_login` 和 `sso_refresh` 可在无 Bearer 令牌时调用，工具参数包含测试 OAuth 客户端凭据及账号密码或刷新令牌；其余工具通过 MCP HTTP 请求的 Bearer 令牌识别人员，并复用 HTTP 的鉴权和 ACL。`sso_validate` 校验当前 Bearer 令牌。
 
 `docs/mcp.md` 列出 MCP 入口、工具、参数、返回值、错误和最小调用示例。MCP 客户端直接配置服务地址及 Bearer 令牌；首期不提供 MCP 专用的 OAuth 自动发现或动态客户端注册。
 
