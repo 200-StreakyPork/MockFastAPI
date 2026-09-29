@@ -4,7 +4,7 @@
 
 ## 准备依赖
 
-需要 Python 3.12+、[uv](https://docs.astral.sh/uv/)、MySQL 和 Redis。以下示例在 Windows PowerShell 中执行。若本机已有 MySQL 和 Redis，可直接使用，跳到“配置”。也可以用 Docker 启动依赖：
+需要 Python 3.12+、[uv](https://docs.astral.sh/uv/)、MySQL 和 Redis。以下 Docker 示例在 Windows PowerShell 中执行；Linux 用户可复用已有的 MySQL、Redis，按后文的 Linux 命令配置。若本机已有 MySQL 和 Redis，可直接跳到“配置”。也可以用 Docker 启动依赖：
 
 ```powershell
 $MySqlPassword = Read-Host 'MySQL root password'
@@ -33,6 +33,20 @@ uv run alembic upgrade head
 uv run python -m mockfastapi.cli reset
 ```
 
+Linux 用户在自己的 checkout 中设置相同的连接信息；将示例密码和数据库名换成实际的 Mock 测试环境：
+
+```bash
+export DATABASE_URL='mysql+asyncmy://root:YOUR_MYSQL_PASSWORD@127.0.0.1:3306/mockfastapi_test'
+export REDIS_URL='redis://:YOUR_REDIS_PASSWORD@127.0.0.1:6379/15'
+export TEST_DATABASE_URL="$DATABASE_URL"
+export TEST_REDIS_URL="$REDIS_URL"
+uv sync
+uv run alembic upgrade head
+uv run python -m mockfastapi.cli reset
+```
+
+也可把 `DATABASE_URL`、`REDIS_URL` 放进项目根目录的 `.env`。Windows 和 Linux 各自执行 `uv sync`，不要在两个系统之间共用同一个 `.venv`。
+
 日常初始化可用 `uv run python -m mockfastapi.cli seed`，只补齐缺失的固定样本。`reset` 会删除当前配置库中的人员与请假数据，并清除当前 Redis DB 中 `mockfastapi:*` 键，然后重建固定样本；执行前确认 URL 指向可重置的 Mock 环境。迁移针对 `DATABASE_URL`，`seed` 和 `reset` 也使用当前 `DATABASE_URL` 与 `REDIS_URL`。
 
 固定用户包括 `alice`（员工）、`bob`（主管）、`carol`、`frank`（主管）、`kate`（HR）和 `leo`（管理员），共 12 人；密码均为 `TestPass123!`。初始请假单有 `1001` 至 `1004`。预置 OAuth 客户端为 `test-client` / `test-secret`，可通过 `OAUTH_CLIENT_ID` 和 `OAUTH_CLIENT_SECRET` 覆盖。OAuth 的 `password` grant 仅用于本地测试，不适合作为生产登录方案。
@@ -45,7 +59,7 @@ uv run python -m mockfastapi.cli reset
 uv run uvicorn mockfastapi.app:create_app --factory --host 127.0.0.1 --port 8000
 ```
 
-后台运行时，在已设置环境变量的 PowerShell 中执行：
+Windows 后台运行时，在已设置环境变量的 PowerShell 中执行：
 
 ```powershell
 .\scripts\start.ps1
@@ -58,6 +72,15 @@ uv run uvicorn mockfastapi.app:create_app --factory --host 127.0.0.1 --port 8000
 ```
 
 停止脚本只会结束 PID 文件记录的本项目进程，并清理 PID 文件。若 PowerShell 执行策略阻止运行本地脚本，可使用 `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1` 或将末尾替换为 `stop.ps1`。服务就绪检查为 `http://127.0.0.1:8000/health/ready`，Swagger UI 为 `http://127.0.0.1:8000/docs`。`/health/ready` 只有在 MySQL、Redis 均可连接时才返回 200。
+
+Linux 后台启停使用 Bash；关闭启动它的终端后，也可以在新的终端执行停止命令：
+
+```bash
+bash scripts/start.sh
+bash scripts/stop.sh
+```
+
+Linux 脚本使用 `.venv/bin/python`，将 PID 和进程启动标记写入 `mockfastapi.linux.pid`（Git 忽略），日志写入 `mockfastapi.linux.stdout.log`、`mockfastapi.linux.stderr.log`。两个平台的脚本从各自所在位置定位项目根目录，可在项目目录运行上述命令。
 
 服务运行且刚执行 `reset` 后，用冒烟脚本检查登录、人员查询、请假创建/修改/审批、撤回、刷新、MCP 调用及登出。脚本会写入测试数据，因此应在隔离环境使用；失败时退出码非零。可用 `MOCKFASTAPI_BASE_URL` 指定其他服务地址。
 
