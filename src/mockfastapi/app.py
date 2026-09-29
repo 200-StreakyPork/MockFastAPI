@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -31,9 +32,15 @@ def create_app() -> FastAPI:
     app = FastAPI(title="MockFastAPI", lifespan=lifespan)
 
     @app.exception_handler(AuthError)
-    async def auth_error(_request, error: AuthError) -> JSONResponse:
+    async def auth_error(request, error: AuthError) -> JSONResponse:
         status = 401 if error.code in {"invalid_client", "invalid_token"} else 400
-        return JSONResponse({"code": error.code, "message": error.message}, status_code=status)
+        body = {"code": error.code, "message": error.message}
+        headers = {}
+        if request.url.path.startswith("/oauth/"):
+            body.update(error=error.code, error_description=error.message)
+            if error.code == "invalid_client":
+                headers["WWW-Authenticate"] = 'Basic realm="mockfastapi"'
+        return JSONResponse(body, status_code=status, headers=headers)
 
     @app.exception_handler(LeaveError)
     async def leave_error(_request, error: LeaveError) -> JSONResponse:
@@ -63,6 +70,47 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(people_router)
     app.include_router(leave_router)
+
+    def openapi() -> dict:
+        if app.openapi_schema is not None:
+            return app.openapi_schema
+        schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+        schema.setdefault("components", {}).setdefault("securitySchemes", {}).update({
+            "OAuthClientBasic": {"type": "http", "scheme": "basic"},
+            "AccessTokenBearer": {"type": "http", "scheme": "bearer"},
+        })
+        token_form = {
+            "oneOf": [
+                {"type": "object", "required": ["grant_type", "username", "password"],
+                 "properties": {"grant_type": {"type": "string", "const": "password"},
+                                "username": {"type": "string"},
+                                "password": {"type": "string", "format": "password"}}},
+                {"type": "object", "required": ["grant_type", "refresh_token"],
+                 "properties": {"grant_type": {"type": "string", "const": "refresh_token"},
+                                "refresh_token": {"type": "string"}}},
+            ]
+        }
+        for path, form in {
+            "/oauth/token": token_form,
+            "/oauth/revoke": {"type": "object", "required": ["token"],
+                              "properties": {"token": {"type": "string"}}},
+            "/oauth/introspect": {"type": "object", "required": ["token"],
+                                  "properties": {"token": {"type": "string"}}},
+        }.items():
+            operation = schema["paths"][path]["post"]
+            operation["security"] = [{"OAuthClientBasic": []}]
+            operation["requestBody"] = {
+                "required": True,
+                "content": {"application/x-www-form-urlencoded": {"schema": form}},
+            }
+        for path, methods in schema["paths"].items():
+            if path.startswith(("/auth/", "/people", "/leaves")):
+                for operation in methods.values():
+                    operation["security"] = [{"AccessTokenBearer": []}]
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = openapi
 
     @app.get("/health/ready")
     async def readiness() -> JSONResponse:

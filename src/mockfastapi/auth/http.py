@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from mockfastapi.auth.schemas import Principal
+from mockfastapi.auth.schemas import Principal, TokenResponse
 from mockfastapi.auth.service import (
     AuthError, authenticate_client, introspect, issue_password_tokens, logout,
     principal_for_access, refresh_tokens, revoke_token,
@@ -56,11 +56,11 @@ async def _form(request: Request) -> dict[str, str]:
     return {key: value[0] for key, value in values.items()}
 
 
-@router.post("/oauth/token")
+@router.post("/oauth/token", response_model=TokenResponse)
 async def token(
-    request: Request, session: AsyncSession = Depends(get_session),
+    request: Request, response: Response, session: AsyncSession = Depends(get_session),
     redis: Redis = Depends(redis_client),
-) -> dict[str, str | int]:
+) -> TokenResponse:
     _basic_client(request)
     form = await _form(request)
     grant = form.get("grant_type")
@@ -71,15 +71,17 @@ async def token(
         pair = await refresh_tokens(redis, form.get("refresh_token", ""))
     else:
         raise AuthError("unsupported_grant_type", "Unsupported grant type")
-    return {**pair.model_dump(), "token_type": "Bearer"}
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return TokenResponse(**pair.model_dump(), token_type="Bearer")
 
 
-@router.post("/oauth/revoke", status_code=204)
+@router.post("/oauth/revoke", status_code=200)
 async def revoke(request: Request, redis: Redis = Depends(redis_client)) -> Response:
     _basic_client(request)
     form = await _form(request)
     await revoke_token(redis, form.get("token", ""))
-    return Response(status_code=204)
+    return Response(status_code=200)
 
 
 @router.post("/oauth/introspect")
