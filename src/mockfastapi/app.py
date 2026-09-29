@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from mockfastapi.auth.http import router as auth_router
+from mockfastapi.auth.service import AuthError
 from mockfastapi.cache import get_redis
 from mockfastapi.db import get_session
 
@@ -11,6 +13,13 @@ from mockfastapi.db import get_session
 def create_app() -> FastAPI:
     """Create the mock service application."""
     app = FastAPI(title="MockFastAPI")
+
+    @app.exception_handler(AuthError)
+    async def auth_error(_request, error: AuthError) -> JSONResponse:
+        status = 401 if error.code in {"invalid_client", "invalid_token"} else 400
+        return JSONResponse({"code": error.code, "message": error.message}, status_code=status)
+
+    app.include_router(auth_router)
 
     @app.get("/health/ready")
     async def readiness() -> JSONResponse:
