@@ -28,7 +28,7 @@ def checked(response: httpx.Response, status: int) -> dict:
 
 
 async def login(client: httpx.AsyncClient, username: str) -> dict:
-    return checked(await client.post("/oauth/token", auth=(CLIENT_ID, CLIENT_SECRET), data={
+    return checked(await client.post("/oauth/token", auth=(CLIENT_ID, CLIENT_SECRET), json={
         "grant_type": "password", "username": username, "password": PASSWORD,
     }), 200)
 
@@ -73,12 +73,15 @@ async def main() -> None:
         expect(withdrawn["status"] == "withdrawn", f"withdrawal failed: {withdrawn}")
 
         refreshed = checked(await client.post("/oauth/token", auth=(CLIENT_ID, CLIENT_SECRET),
-                                              data={"grant_type": "refresh_token",
+                                              json={"grant_type": "refresh_token",
                                                     "refresh_token": alice["refresh_token"]}), 200)
         expect(refreshed["access_token"] != alice["access_token"], "refresh did not rotate access token")
         refreshed_headers = {"Authorization": f"Bearer {refreshed['access_token']}"}
         expect(checked(await client.get("/auth/me", headers=refreshed_headers), 200)["username"]
                == "alice", "refreshed access token failed")
+        active = checked(await client.post("/oauth/introspect", auth=(CLIENT_ID, CLIENT_SECRET),
+                                           json={"token": refreshed["access_token"]}), 200)
+        expect(active["active"] is True, f"refreshed access token is inactive: {active}")
 
         async with httpx.AsyncClient(headers=refreshed_headers, timeout=10) as mcp_http:
             async with streamable_http_client(f"{BASE_URL}/mcp", http_client=mcp_http) as (
@@ -95,7 +98,12 @@ async def main() -> None:
         checked(await client.post("/auth/logout", headers=refreshed_headers), 204)
         expect((await client.get("/auth/me", headers=refreshed_headers)).status_code == 401,
                "logged-out token still works")
-        print("PASS: ready, login, people, create/update/approve, withdraw, refresh, MCP, logout")
+        checked(await client.post("/oauth/revoke", auth=(CLIENT_ID, CLIENT_SECRET),
+                                  json={"token": bob["refresh_token"]}), 200)
+        expect((await client.get("/auth/me", headers=bob_headers)).status_code == 401,
+               "revoked session still works")
+        print("PASS: ready, login, people, create/update/approve, withdraw, refresh, "
+              "introspect, MCP, logout, revoke")
 
 
 if __name__ == "__main__":

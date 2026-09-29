@@ -73,11 +73,13 @@
 
 ### 任务 3：OAuth 令牌生命周期与身份识别
 
+2026-09-29 用户批准的接口调整：`/oauth/token`、`/oauth/revoke`、`/oauth/introspect` 的 HTTP 请求体只接受 JSON，不保留表单编码兼容。以下验收描述按此调整；服务层及 MCP 工具调用不变。
+
 **文件：** 新建 `src/mockfastapi/auth/{__init__,schemas,service,http}.py`、`tests/test_auth.py`；修改 `src/mockfastapi/app.py`、`src/mockfastapi/config.py`。
 
 **接口：** 在 `schemas.py` 提供 `Principal(id: int, username: str, role: str)` 和 `TokenPair(access_token: str, refresh_token: str, expires_in: int)`。服务函数为 `authenticate_client(client_id: str, client_secret: str, settings: Settings) -> None`、`async issue_password_tokens(session: AsyncSession, redis: Redis, username: str, password: str) -> TokenPair`、`async refresh_tokens(redis: Redis, refresh_token: str) -> TokenPair`、`async principal_for_access(redis: Redis, token: str) -> Principal`、`async revoke_token(redis: Redis, token: str) -> None`、`async logout(redis: Redis, token: str) -> None`、`async introspect(redis: Redis, token: str) -> dict[str, bool | int | str]`。HTTP 和 MCP 在执行密码登录、刷新、撤销或令牌校验前，均须认证预置测试客户端。无效授权与凭据映射为明确的领域异常。HTTP 路由为 `/oauth/token`、`/oauth/revoke`、`/oauth/introspect`、`/auth/me`、`/auth/logout`。
 
-- [ ] **步骤 1：在 `tests/test_auth.py` 编写 `test_password_refresh_replay_logout` 和 `test_client_and_user_credentials`。** 断言表单令牌响应为 Bearer，且 `expires_in=1800`；刷新返回新令牌对，旧刷新令牌不可再用；登出后新访问令牌失效；错误的客户端或用户凭据不能获得令牌。
+- [ ] **步骤 1：在 `tests/test_auth.py` 编写 `test_password_refresh_replay_logout` 和 `test_client_and_user_credentials`。** 断言 JSON 请求签发的令牌响应为 Bearer，且 `expires_in=1800`；刷新返回新令牌对，旧刷新令牌不可再用；登出后新访问令牌失效；错误的客户端或用户凭据不能获得令牌。
 - [ ] **步骤 2：运行 `uv run pytest tests/test_auth.py -v`。** 应因路由尚不存在而失败。
 - [ ] **步骤 3：实现 Schema、Redis 会话与令牌映射、Argon2 密码校验、Basic 客户端认证及 OAuth HTTP 路由。** 刷新时让旧令牌失效并签发新令牌对。Redis TTL 分别为 30 分钟和 7 天；业务错误返回稳定的 `code` 和 `message`。
 - [ ] **步骤 4：运行 `uv run pytest tests/test_auth.py -v`。** 所有认证测试应通过。

@@ -72,14 +72,33 @@ uv run pytest -v
 
 ## HTTP 与 MCP
 
-HTTP OAuth 端点为 `POST /oauth/token`、`POST /oauth/revoke`、`POST /oauth/introspect`，用户端点为 `GET /auth/me`、`POST /auth/logout`。`/oauth/token` 使用 HTTP Basic 客户端认证及 `application/x-www-form-urlencoded` 请求体，例如：
+HTTP OAuth 端点为 `POST /oauth/token`、`POST /oauth/revoke`、`POST /oauth/introspect`，用户端点为 `GET /auth/me`、`POST /auth/logout`。三个 OAuth 端点只接受 `application/json` 请求体，客户端凭据仍通过 `Authorization: Basic` 提交。例如：
 
 ```powershell
 $basic = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('test-client:test-secret'))
-$token = (Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/oauth/token' `
-  -Headers @{Authorization="Basic $basic"} -ContentType 'application/x-www-form-urlencoded' `
-  -Body @{grant_type='password'; username='alice'; password='TestPass123!'}).access_token
+$headers = @{Authorization="Basic $basic"}
+$tokens = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/oauth/token' `
+  -Headers $headers -ContentType 'application/json' `
+  -Body (@{grant_type='password'; username='alice'; password='TestPass123!'} | ConvertTo-Json)
+$token = $tokens.access_token
 Invoke-RestMethod -Uri 'http://127.0.0.1:8000/people' -Headers @{Authorization="Bearer $token"}
+$refreshed = Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/oauth/token' `
+  -Headers $headers -ContentType 'application/json' `
+  -Body (@{grant_type='refresh_token'; refresh_token=$tokens.refresh_token} | ConvertTo-Json)
+Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/oauth/introspect' `
+  -Headers $headers -ContentType 'application/json' `
+  -Body (@{token=$refreshed.access_token} | ConvertTo-Json)
+Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/oauth/revoke' `
+  -Headers $headers -ContentType 'application/json' `
+  -Body (@{token=$refreshed.refresh_token} | ConvertTo-Json)
+```
+
+对应的 curl 登录示例：
+
+```sh
+curl -u test-client:test-secret -H 'Content-Type: application/json' \
+  -d '{"grant_type":"password","username":"alice","password":"TestPass123!"}' \
+  http://127.0.0.1:8000/oauth/token
 ```
 
 人员接口为 `GET /people`、`GET /people/{person_id}`；请假接口为 `GET/POST /leaves`、`GET/PATCH /leaves/{leave_id}`、`POST /leaves/{leave_id}/decision` 与 `POST /leaves/{leave_id}/withdraw`。所有业务接口使用 Bearer access token。审批人用 `decision: "approved"` 或 `"rejected"` 作决定。

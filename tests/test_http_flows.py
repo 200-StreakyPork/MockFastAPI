@@ -19,7 +19,7 @@ def reset_fixtures() -> None:
 
 
 async def bearer(client: httpx.AsyncClient, username: str) -> dict[str, str]:
-    response = await client.post("/oauth/token", auth=("test-client", "test-secret"), data={
+    response = await client.post("/oauth/token", auth=("test-client", "test-secret"), json={
         "grant_type": "password", "username": username, "password": "TestPass123!",
     })
     assert response.status_code == 200, response.text

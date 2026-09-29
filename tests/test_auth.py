@@ -10,7 +10,7 @@ import pytest
 from mockfastapi.app import create_app
 
 
-def test_openapi_describes_oauth_forms_and_authentication() -> None:
+def test_openapi_describes_oauth_json_and_authentication() -> None:
     schema = create_app().openapi()
     schemes = schema["components"]["securitySchemes"]
     assert schemes["OAuthClientBasic"] == {"type": "http", "scheme": "basic"}
@@ -20,18 +20,19 @@ def test_openapi_describes_oauth_forms_and_authentication() -> None:
     for path in ("/oauth/token", "/oauth/revoke", "/oauth/introspect"):
         operation = paths[path]["post"]
         assert operation["security"] == [{"OAuthClientBasic": []}]
-        form = operation["requestBody"]["content"]["application/x-www-form-urlencoded"]["schema"]
-        assert form
-    token_form = paths["/oauth/token"]["post"]["requestBody"]["content"]["application/x-www-form-urlencoded"]["schema"]
-    grants = token_form["oneOf"]
+        content = operation["requestBody"]["content"]
+        assert list(content) == ["application/json"]
+        assert content["application/json"]["schema"]
+    token_json = paths["/oauth/token"]["post"]["requestBody"]["content"]["application/json"]["schema"]
+    grants = token_json["oneOf"]
     assert {grant["properties"]["grant_type"]["const"] for grant in grants} == {
         "password", "refresh_token",
     }
     assert {tuple(grant["required"]) for grant in grants} == {
         ("grant_type", "username", "password"), ("grant_type", "refresh_token"),
     }
-    assert paths["/oauth/revoke"]["post"]["requestBody"]["content"]["application/x-www-form-urlencoded"]["schema"]["required"] == ["token"]
-    assert paths["/oauth/introspect"]["post"]["requestBody"]["content"]["application/x-www-form-urlencoded"]["schema"]["required"] == ["token"]
+    assert paths["/oauth/revoke"]["post"]["requestBody"]["content"]["application/json"]["schema"]["required"] == ["token"]
+    assert paths["/oauth/introspect"]["post"]["requestBody"]["content"]["application/json"]["schema"]["required"] == ["token"]
     for path in ("/auth/me", "/auth/logout", "/people", "/people/{person_id}",
                  "/leaves", "/leaves/{leave_id}", "/leaves/{leave_id}/decision",
                  "/leaves/{leave_id}/withdraw"):
@@ -57,7 +58,7 @@ async def test_password_refresh_replay_logout(isolated_settings: None) -> None:
         transport=httpx.ASGITransport(app=create_app()), base_url="http://test"
     ) as client:
         auth = ("test-client", "test-secret")
-        login = await client.post("/oauth/token", auth=auth, data={
+        login = await client.post("/oauth/token", auth=auth, json={
             "grant_type": "password", "username": "alice", "password": "TestPass123!",
         })
         assert login.status_code == 200, login.text
@@ -71,7 +72,7 @@ async def test_password_refresh_replay_logout(isolated_settings: None) -> None:
         assert me.status_code == 200, me.text
         assert me.json() == {"id": 1, "username": "alice", "role": "employee"}
 
-        refreshed = await client.post("/oauth/token", auth=auth, data={
+        refreshed = await client.post("/oauth/token", auth=auth, json={
             "grant_type": "refresh_token", "refresh_token": first["refresh_token"],
         })
         assert refreshed.status_code == 200, refreshed.text
@@ -80,7 +81,7 @@ async def test_password_refresh_replay_logout(isolated_settings: None) -> None:
         second = refreshed.json()
         assert second["access_token"] != first["access_token"]
         assert second["refresh_token"] != first["refresh_token"]
-        replay = await client.post("/oauth/token", auth=auth, data={
+        replay = await client.post("/oauth/token", auth=auth, json={
             "grant_type": "refresh_token", "refresh_token": first["refresh_token"],
         })
         assert replay.status_code == 400
@@ -88,9 +89,9 @@ async def test_password_refresh_replay_logout(isolated_settings: None) -> None:
         assert replay.json()["error"] == "invalid_grant"
         assert replay.json()["error_description"] == replay.json()["message"]
         assert (await client.post("/oauth/introspect", auth=auth,
-                                  data={"token": first["access_token"]})).json() == {"active": False}
+                                  json={"token": first["access_token"]})).json() == {"active": False}
         active = await client.post("/oauth/introspect", auth=auth,
-                                   data={"token": second["access_token"]})
+                                   json={"token": second["access_token"]})
         assert active.json()["active"] is True
         logout = await client.post("/auth/logout", headers={
             "Authorization": f"Bearer {second['access_token']}"})
@@ -100,12 +101,12 @@ async def test_password_refresh_replay_logout(isolated_settings: None) -> None:
         assert gone.status_code == 401
         assert gone.json()["code"] == "invalid_token"
 
-        third_login = await client.post("/oauth/token", auth=auth, data={
+        third_login = await client.post("/oauth/token", auth=auth, json={
             "grant_type": "password", "username": "alice", "password": "TestPass123!",
         })
         third = third_login.json()
         revoked = await client.post("/oauth/revoke", auth=auth,
-                                    data={"token": third["refresh_token"]})
+                                    json={"token": third["refresh_token"]})
         assert revoked.status_code == 200
         assert (await client.get("/auth/me", headers={
             "Authorization": f"Bearer {third['access_token']}"})).status_code == 401
@@ -119,15 +120,31 @@ async def test_client_and_user_credentials(isolated_settings: None) -> None:
         transport=httpx.ASGITransport(app=create_app()), base_url="http://test"
     ) as client:
         grant = {"grant_type": "password", "username": "alice", "password": "TestPass123!"}
-        bad_client = await client.post("/oauth/token", auth=("test-client", "wrong"), data=grant)
+        bad_client = await client.post("/oauth/token", auth=("test-client", "wrong"), json=grant)
         assert bad_client.status_code == 401
         assert bad_client.json()["code"] == "invalid_client"
         assert bad_client.json()["error"] == "invalid_client"
         assert bad_client.json()["error_description"] == bad_client.json()["message"]
         assert bad_client.headers["WWW-Authenticate"] == 'Basic realm="mockfastapi"'
         bad_user = await client.post("/oauth/token", auth=("test-client", "test-secret"),
-                                     data={**grant, "password": "wrong"})
+                                     json={**grant, "password": "wrong"})
         assert bad_user.status_code == 400
         assert bad_user.json()["code"] == "invalid_grant"
         assert bad_user.json()["error"] == "invalid_grant"
         assert bad_user.json()["error_description"] == bad_user.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_oauth_endpoints_reject_form_bodies(isolated_settings: None) -> None:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=create_app()), base_url="http://test"
+    ) as client:
+        for path, body in (
+            ("/oauth/token", {"grant_type": "password", "username": "alice", "password": "TestPass123!"}),
+            ("/oauth/revoke", {"token": "unused"}),
+            ("/oauth/introspect", {"token": "unused"}),
+        ):
+            response = await client.post(path, auth=("test-client", "test-secret"), data=body)
+            assert response.status_code == 400
+            assert response.json()["error"] == "invalid_request"
+            assert response.json()["error_description"] == response.json()["message"]

@@ -1,9 +1,9 @@
-"""OAuth form routes and authenticated identity endpoints."""
+"""OAuth JSON routes and authenticated identity endpoints."""
 
 import base64
 import binascii
+import json
 from collections.abc import AsyncIterator
-from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, Request, Response
 from redis.asyncio import Redis
@@ -49,11 +49,16 @@ def _bearer(request: Request) -> str:
     return value[7:]
 
 
-async def _form(request: Request) -> dict[str, str]:
-    if request.headers.get("content-type", "").split(";", 1)[0] != "application/x-www-form-urlencoded":
-        raise AuthError("invalid_request", "URL-encoded form required")
-    values = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
-    return {key: value[0] for key, value in values.items()}
+async def _json_body(request: Request) -> dict[str, str]:
+    if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+        raise AuthError("invalid_request", "JSON request body required")
+    try:
+        values = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise AuthError("invalid_request", "Invalid JSON request body") from error
+    if not isinstance(values, dict):
+        raise AuthError("invalid_request", "JSON object required")
+    return values
 
 
 @router.post("/oauth/token", response_model=TokenResponse)
@@ -62,13 +67,13 @@ async def token(
     redis: Redis = Depends(redis_client),
 ) -> TokenResponse:
     _basic_client(request)
-    form = await _form(request)
-    grant = form.get("grant_type")
+    body = await _json_body(request)
+    grant = body.get("grant_type")
     if grant == "password":
-        pair = await issue_password_tokens(session, redis, form.get("username", ""),
-                                           form.get("password", ""))
+        pair = await issue_password_tokens(session, redis, body.get("username", ""),
+                                           body.get("password", ""))
     elif grant == "refresh_token":
-        pair = await refresh_tokens(redis, form.get("refresh_token", ""))
+        pair = await refresh_tokens(redis, body.get("refresh_token", ""))
     else:
         raise AuthError("unsupported_grant_type", "Unsupported grant type")
     response.headers["Cache-Control"] = "no-store"
@@ -79,8 +84,8 @@ async def token(
 @router.post("/oauth/revoke", status_code=200)
 async def revoke(request: Request, redis: Redis = Depends(redis_client)) -> Response:
     _basic_client(request)
-    form = await _form(request)
-    await revoke_token(redis, form.get("token", ""))
+    body = await _json_body(request)
+    await revoke_token(redis, body.get("token", ""))
     return Response(status_code=200)
 
 
@@ -89,8 +94,8 @@ async def token_introspection(
     request: Request, redis: Redis = Depends(redis_client)
 ) -> dict[str, bool | int | str]:
     _basic_client(request)
-    form = await _form(request)
-    return await introspect(redis, form.get("token", ""))
+    body = await _json_body(request)
+    return await introspect(redis, body.get("token", ""))
 
 
 @router.get("/auth/me")

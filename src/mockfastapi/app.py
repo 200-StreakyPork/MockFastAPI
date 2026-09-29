@@ -79,29 +79,33 @@ def create_app() -> FastAPI:
             "OAuthClientBasic": {"type": "http", "scheme": "basic"},
             "AccessTokenBearer": {"type": "http", "scheme": "bearer"},
         })
-        token_form = {
+        token_json = {
             "oneOf": [
                 {"type": "object", "required": ["grant_type", "username", "password"],
+                 "example": {"grant_type": "password", "username": "alice", "password": "TestPass123!"},
                  "properties": {"grant_type": {"type": "string", "const": "password"},
                                 "username": {"type": "string"},
                                 "password": {"type": "string", "format": "password"}}},
                 {"type": "object", "required": ["grant_type", "refresh_token"],
+                 "example": {"grant_type": "refresh_token", "refresh_token": "your-refresh-token"},
                  "properties": {"grant_type": {"type": "string", "const": "refresh_token"},
                                 "refresh_token": {"type": "string"}}},
             ]
         }
-        for path, form in {
-            "/oauth/token": token_form,
+        for path, body in {
+            "/oauth/token": token_json,
             "/oauth/revoke": {"type": "object", "required": ["token"],
-                              "properties": {"token": {"type": "string"}}},
+                              "properties": {"token": {"type": "string"}},
+                              "example": {"token": "your-token"}},
             "/oauth/introspect": {"type": "object", "required": ["token"],
-                                  "properties": {"token": {"type": "string"}}},
+                                  "properties": {"token": {"type": "string"}},
+                                  "example": {"token": "your-access-token"}},
         }.items():
             operation = schema["paths"][path]["post"]
             operation["security"] = [{"OAuthClientBasic": []}]
             operation["requestBody"] = {
                 "required": True,
-                "content": {"application/x-www-form-urlencoded": {"schema": form}},
+                "content": {"application/json": {"schema": body}},
             }
         for path, methods in schema["paths"].items():
             if path.startswith(("/auth/", "/people", "/leaves")):
