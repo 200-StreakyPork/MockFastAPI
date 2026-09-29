@@ -45,21 +45,19 @@ uv run python -m mockfastapi.cli reset
 uv run uvicorn mockfastapi.app:create_app --factory --host 127.0.0.1 --port 8000
 ```
 
-后台运行时，在同一个已设置环境变量的 PowerShell 中执行；标准输出和错误日志分别写入仓库根目录：
+后台运行时，在已设置环境变量的 PowerShell 中执行：
 
 ```powershell
-$stdout = Join-Path (Get-Location) 'mockfastapi.stdout.log'
-$stderr = Join-Path (Get-Location) 'mockfastapi.stderr.log'
-$python = Join-Path (Get-Location) '.venv\Scripts\python.exe'
-$server = Start-Process -FilePath $python `
-  -ArgumentList @('-m','uvicorn','mockfastapi.app:create_app','--factory','--host','127.0.0.1','--port','8000') `
-  -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
-  -WindowStyle Hidden -PassThru
-$server.Id
-Get-Content $stderr -Tail 30
+.\scripts\start.ps1
 ```
 
-后台命令通过虚拟环境中的 Python 启动服务。在同一 PowerShell 中执行 `Stop-Process -Id $server.Id` 停止这次启动的服务。服务就绪检查为 `http://127.0.0.1:8000/health/ready`，Swagger UI 为 `http://127.0.0.1:8000/docs`。`/health/ready` 只有在 MySQL、Redis 均可连接时才返回 200。
+脚本通过虚拟环境中的 Python 隐藏窗口启动服务，将进程 ID 与启动时间写入仓库根目录的 `mockfastapi.pid`（Git 忽略）。标准输出和错误日志分别写入 `mockfastapi.stdout.log`、`mockfastapi.stderr.log`。关闭当前终端后，随时可在项目目录打开新的 PowerShell 停止服务：
+
+```powershell
+.\scripts\stop.ps1
+```
+
+停止脚本只会结束 PID 文件记录的本项目进程，并清理 PID 文件。若 PowerShell 执行策略阻止运行本地脚本，可使用 `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1` 或将末尾替换为 `stop.ps1`。服务就绪检查为 `http://127.0.0.1:8000/health/ready`，Swagger UI 为 `http://127.0.0.1:8000/docs`。`/health/ready` 只有在 MySQL、Redis 均可连接时才返回 200。
 
 服务运行且刚执行 `reset` 后，用冒烟脚本检查登录、人员查询、请假创建/修改/审批、撤回、刷新、MCP 调用及登出。脚本会写入测试数据，因此应在隔离环境使用；失败时退出码非零。可用 `MOCKFASTAPI_BASE_URL` 指定其他服务地址。
 
