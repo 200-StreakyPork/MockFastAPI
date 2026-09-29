@@ -24,7 +24,6 @@ from mockfastapi.cache import get_redis
 from mockfastapi.config import Settings
 from mockfastapi.db import get_session
 
-
 router = APIRouter()
 
 
