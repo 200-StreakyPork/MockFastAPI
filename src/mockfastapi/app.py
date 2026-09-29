@@ -45,15 +45,13 @@ def create_app() -> FastAPI:
     @app.exception_handler(LeaveError)
     async def leave_error(_request, error: LeaveError) -> JSONResponse:
         return JSONResponse(
-            {"code": error.code, "message": error.message}, status_code=error.status_code,
+            {"code": error.code, "message": error.message},
+            status_code=error.status_code,
         )
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_request, error: RequestValidationError) -> JSONResponse:
-        details = [
-            {"field": ".".join(map(str, item["loc"])), "message": item["msg"]}
-            for item in error.errors()
-        ]
+        details = [{"field": ".".join(map(str, item["loc"])), "message": item["msg"]} for item in error.errors()]
         return JSONResponse(
             {"code": "invalid_input", "message": "Invalid request", "details": details},
             status_code=422,
@@ -61,10 +59,10 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error(_request, error: StarletteHTTPException) -> JSONResponse:
-        code = {401: "unauthorized", 403: "forbidden", 404: "not_found",
-                409: "conflict", 422: "invalid_input"}.get(error.status_code, "http_error")
+        code = {401: "unauthorized", 403: "forbidden", 404: "not_found", 409: "conflict", 422: "invalid_input"}.get(error.status_code, "http_error")
         return JSONResponse(
-            {"code": code, "message": str(error.detail)}, status_code=error.status_code,
+            {"code": code, "message": str(error.detail)},
+            status_code=error.status_code,
         )
 
     app.include_router(auth_router)
@@ -75,31 +73,49 @@ def create_app() -> FastAPI:
         if app.openapi_schema is not None:
             return app.openapi_schema
         schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
-        schema.setdefault("components", {}).setdefault("securitySchemes", {}).update({
-            "OAuthClientBasic": {"type": "http", "scheme": "basic"},
-            "AccessTokenBearer": {"type": "http", "scheme": "bearer"},
-        })
+        schema.setdefault("components", {}).setdefault("securitySchemes", {}).update(
+            {
+                "OAuthClientBasic": {"type": "http", "scheme": "basic"},
+                "AccessTokenBearer": {"type": "http", "scheme": "bearer"},
+            }
+        )
         token_json = {
             "oneOf": [
-                {"type": "object", "required": ["grant_type", "username", "password"],
-                 "example": {"grant_type": "password", "username": "alice", "password": "TestPass123!"},
-                 "properties": {"grant_type": {"type": "string", "const": "password"},
-                                "username": {"type": "string"},
-                                "password": {"type": "string", "format": "password"}}},
-                {"type": "object", "required": ["grant_type", "refresh_token"],
-                 "example": {"grant_type": "refresh_token", "refresh_token": "your-refresh-token"},
-                 "properties": {"grant_type": {"type": "string", "const": "refresh_token"},
-                                "refresh_token": {"type": "string"}}},
+                {
+                    "type": "object",
+                    "required": ["grant_type", "username", "password"],
+                    "example": {"grant_type": "password", "username": "alice", "password": "TestPass123!"},
+                    "properties": {
+                        "grant_type": {"type": "string", "const": "password"},
+                        "username": {"type": "string"},
+                        "password": {"type": "string", "format": "password"},
+                    },
+                },
+                {
+                    "type": "object",
+                    "required": ["grant_type", "refresh_token"],
+                    "example": {"grant_type": "refresh_token", "refresh_token": "your-refresh-token"},
+                    "properties": {
+                        "grant_type": {"type": "string", "const": "refresh_token"},
+                        "refresh_token": {"type": "string"},
+                    },
+                },
             ]
         }
         for path, body in {
             "/oauth/token": token_json,
-            "/oauth/revoke": {"type": "object", "required": ["token"],
-                              "properties": {"token": {"type": "string"}},
-                              "example": {"token": "your-token"}},
-            "/oauth/introspect": {"type": "object", "required": ["token"],
-                                  "properties": {"token": {"type": "string"}},
-                                  "example": {"token": "your-access-token"}},
+            "/oauth/revoke": {
+                "type": "object",
+                "required": ["token"],
+                "properties": {"token": {"type": "string"}},
+                "example": {"token": "your-token"},
+            },
+            "/oauth/introspect": {
+                "type": "object",
+                "required": ["token"],
+                "properties": {"token": {"type": "string"}},
+                "example": {"token": "your-access-token"},
+            },
         }.items():
             operation = schema["paths"][path]["post"]
             operation["security"] = [{"OAuthClientBasic": []}]

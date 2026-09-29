@@ -16,17 +16,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from mockfastapi.auth.schemas import Principal
 from mockfastapi.auth.service import (
-    AuthError, authenticate_client, introspect, issue_password_tokens, logout,
-    principal_for_access, refresh_tokens,
+    AuthError,
+    authenticate_client,
+    introspect,
+    issue_password_tokens,
+    logout,
+    principal_for_access,
+    refresh_tokens,
 )
 from mockfastapi.cache import get_redis
 from mockfastapi.config import Settings
 from mockfastapi.db import get_session
 from mockfastapi.leave.schemas import LeaveCreate, LeaveDecision, LeaveOut, LeavePatch
 from mockfastapi.leave.service import (
-    LeaveError, create_leave as service_create_leave, decide_leave as service_decide_leave,
-    get_leave as service_get_leave, list_leaves as service_list_leaves,
-    update_leave as service_update_leave, withdraw_leave as service_withdraw_leave,
+    LeaveError,
+    create_leave as service_create_leave,
+    decide_leave as service_decide_leave,
+    get_leave as service_get_leave,
+    list_leaves as service_list_leaves,
+    update_leave as service_update_leave,
+    withdraw_leave as service_withdraw_leave,
 )
 from mockfastapi.people.schemas import PersonOut
 from mockfastapi.people.service import get_person as service_get_person, list_people as service_list_people
@@ -48,7 +57,8 @@ class ServiceMCP(FastMCP):
                 data = {"code": "internal_error", "message": "Tool execution failed"}
             return CallToolResult(
                 content=[TextContent(type="text", text=json.dumps(data))],
-                structuredContent=data, isError=True,
+                structuredContent=data,
+                isError=True,
             )
 
 
@@ -81,8 +91,7 @@ def _leave(leave: Any) -> dict[str, Any]:
 
 
 def create_mcp_server() -> ServiceMCP:
-    mcp = ServiceMCP("MockFastAPI", streamable_http_path="/mcp", stateless_http=True,
-                     json_response=True)
+    mcp = ServiceMCP("MockFastAPI", streamable_http_path="/mcp", stateless_http=True, json_response=True)
 
     @mcp.tool(structured_output=True)
     async def sso_login(client_id: str, client_secret: str, username: str, password: str) -> dict[str, Any]:
@@ -136,24 +145,21 @@ def create_mcp_server() -> ServiceMCP:
             return PersonOut.model_validate(person).model_dump(mode="json")
 
     @mcp.tool(structured_output=True)
-    async def create_leave(days: Decimal, leave_type: str, start_at: datetime,
-                           end_at: datetime, approver_id: int, reason: str,
-                           context: Context) -> dict[str, Any]:
+    async def create_leave(
+        days: Decimal, leave_type: str, start_at: datetime, end_at: datetime, approver_id: int, reason: str, context: Context
+    ) -> dict[str, Any]:
         """Create a pending leave for the Bearer principal."""
-        data = LeaveCreate(days=days, leave_type=leave_type, start_at=start_at,
-                           end_at=end_at, approver_id=approver_id, reason=reason)
+        data = LeaveCreate(days=days, leave_type=leave_type, start_at=start_at, end_at=end_at, approver_id=approver_id, reason=reason)
         async with _resources() as (session, redis):
             return _leave(await service_create_leave(session, await _principal(context, redis), data))
 
     @mcp.tool(structured_output=True)
-    async def list_leaves(context: Context, status: str | None = None,
-                          limit: int = 20, offset: int = 0) -> dict[str, Any]:
+    async def list_leaves(context: Context, status: str | None = None, limit: int = 20, offset: int = 0) -> dict[str, Any]:
         """List leave records visible to the Bearer principal."""
         if limit < 1 or offset < 0 or status not in (None, "pending", "approved", "rejected", "withdrawn"):
             raise ValueError("invalid filters")
         async with _resources() as (session, redis):
-            leaves = await service_list_leaves(session, await _principal(context, redis),
-                                               status, limit, offset)
+            leaves = await service_list_leaves(session, await _principal(context, redis), status, limit, offset)
             return {"leaves": [_leave(leave) for leave in leaves]}
 
     @mcp.tool(structured_output=True)
@@ -163,25 +169,31 @@ def create_mcp_server() -> ServiceMCP:
             return _leave(await service_get_leave(session, await _principal(context, redis), leave_id))
 
     @mcp.tool(structured_output=True)
-    async def update_leave(leave_id: int, context: Context, days: Decimal | None = None,
-                           leave_type: str | None = None, start_at: datetime | None = None,
-                           end_at: datetime | None = None, approver_id: int | None = None,
-                           reason: str | None = None) -> dict[str, Any]:
+    async def update_leave(
+        leave_id: int,
+        context: Context,
+        days: Decimal | None = None,
+        leave_type: str | None = None,
+        start_at: datetime | None = None,
+        end_at: datetime | None = None,
+        approver_id: int | None = None,
+        reason: str | None = None,
+    ) -> dict[str, Any]:
         """Patch a pending leave owned by the Bearer principal."""
-        changes = {key: value for key, value in locals().items()
-                   if key in {"days", "leave_type", "start_at", "end_at", "approver_id", "reason"}
-                   and value is not None}
+        changes = {
+            key: value
+            for key, value in locals().items()
+            if key in {"days", "leave_type", "start_at", "end_at", "approver_id", "reason"} and value is not None
+        }
         data = LeavePatch(**changes)
         async with _resources() as (session, redis):
             return _leave(await service_update_leave(session, await _principal(context, redis), leave_id, data))
 
     @mcp.tool(structured_output=True)
-    async def decide_leave(leave_id: int, decision: Literal["approved", "rejected"],
-                           context: Context) -> dict[str, Any]:
+    async def decide_leave(leave_id: int, decision: Literal["approved", "rejected"], context: Context) -> dict[str, Any]:
         """Approve or reject a pending leave as its approver or admin."""
         async with _resources() as (session, redis):
-            return _leave(await service_decide_leave(session, await _principal(context, redis),
-                                                     leave_id, LeaveDecision(decision=decision)))
+            return _leave(await service_decide_leave(session, await _principal(context, redis), leave_id, LeaveDecision(decision=decision)))
 
     @mcp.tool(structured_output=True)
     async def withdraw_leave(leave_id: int, context: Context) -> dict[str, Any]:

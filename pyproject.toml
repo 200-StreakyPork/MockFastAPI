@@ -20,6 +20,7 @@ dev = [
     "httpx>=0.28,<1",
     "pytest>=8.4,<9",
     "pytest-asyncio>=1.1,<2",
+    "ruff>=0.16.9",
 ]
 
 [build-system]
@@ -32,3 +33,10 @@ packages = ["src/mockfastapi"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 150
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "UP", "I"]
+ignore = ["F401"]

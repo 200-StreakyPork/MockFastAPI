@@ -44,12 +44,8 @@ async def test_seed_is_idempotent_and_reset_restores_fixed_records(
             fixed_leave_ids = [leave.id for leave in initial_leaves]
             assert len(initial_people) == 12
             assert len({person.department for person in initial_people}) >= 3
-            assert {person.role for person in initial_people} == {
-                "employee", "supervisor", "hr", "admin"
-            }
-            assert {leave.status for leave in initial_leaves} == {
-                "pending", "approved", "rejected", "withdrawn"
-            }
+            assert {person.role for person in initial_people} == {"employee", "supervisor", "hr", "admin"}
+            assert {leave.status for leave in initial_leaves} == {"pending", "approved", "rejected", "withdrawn"}
 
         run_cli("seed")
         run_cli("seed")
@@ -83,9 +79,7 @@ async def test_seed_is_idempotent_and_reset_restores_fixed_records(
             leaves = (await session.scalars(select(Leave).order_by(Leave.id))).all()
             assert [person.id for person in people] == fixed_person_ids
             assert [leave.id for leave in leaves] == fixed_leave_ids
-            assert {leave.status for leave in leaves} == {
-                "pending", "approved", "rejected", "withdrawn"
-            }
+            assert {leave.status for leave in leaves} == {"pending", "approved", "rejected", "withdrawn"}
         assert await redis.get("mockfastapi:test-session") is None
         assert await redis.get("other-app:test-session") == b"keep"
     finally:

@@ -6,9 +6,7 @@ import pytest
 async def test_readiness_reports_mysql_and_redis(isolated_settings: None) -> None:
     from mockfastapi.app import create_app
 
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=create_app()), base_url="http://test"
-    ) as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app()), base_url="http://test") as client:
         response = await client.get("/health/ready")
 
     assert response.status_code == 200
@@ -25,9 +23,7 @@ async def test_readiness_reports_unavailable_dependencies(
 
     from mockfastapi.app import create_app
 
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=create_app()), base_url="http://test"
-    ) as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app()), base_url="http://test") as client:
         response = await client.get("/health/ready")
 
     assert response.status_code == 503

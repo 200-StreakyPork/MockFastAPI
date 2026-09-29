@@ -28,8 +28,7 @@ class AuthError(Exception):
 
 
 def authenticate_client(client_id: str, client_secret: str, settings: Settings) -> None:
-    if not (secrets.compare_digest(client_id, settings.oauth_client_id)
-            and secrets.compare_digest(client_secret, settings.oauth_client_secret)):
+    if not (secrets.compare_digest(client_id, settings.oauth_client_id) and secrets.compare_digest(client_secret, settings.oauth_client_secret)):
         raise AuthError("invalid_client", "Invalid client credentials")
 
 
@@ -41,16 +40,12 @@ async def _issue(redis: Redis, principal: Principal) -> TokenPair:
     access = secrets.token_urlsafe(32)
     refresh = secrets.token_urlsafe(32)
     identity = principal.model_dump()
-    await redis.setex(_key("access", access), ACCESS_TTL,
-                      json.dumps({**identity, "refresh_token": refresh}))
-    await redis.setex(_key("refresh", refresh), REFRESH_TTL,
-                      json.dumps({**identity, "access_token": access}))
+    await redis.setex(_key("access", access), ACCESS_TTL, json.dumps({**identity, "refresh_token": refresh}))
+    await redis.setex(_key("refresh", refresh), REFRESH_TTL, json.dumps({**identity, "access_token": access}))
     return TokenPair(access_token=access, refresh_token=refresh, expires_in=ACCESS_TTL)
 
 
-async def issue_password_tokens(
-    session: AsyncSession, redis: Redis, username: str, password: str
-) -> TokenPair:
+async def issue_password_tokens(session: AsyncSession, redis: Redis, username: str, password: str) -> TokenPair:
     person = await session.scalar(select(Person).where(Person.username == username))
     if person is None or not PasswordHash.recommended().verify(password, person.password_hash):
         raise AuthError("invalid_grant", "Invalid username or password")
@@ -94,5 +89,4 @@ async def introspect(redis: Redis, token: str) -> dict[str, bool | int | str]:
     if data is None:
         return {"active": False}
     record = json.loads(data)
-    return {"active": True, "sub": str(record["id"]), "username": record["username"],
-            "role": record["role"], "token_type": "Bearer"}
+    return {"active": True, "sub": str(record["id"]), "username": record["username"], "role": record["role"], "token_type": "Bearer"}

@@ -34,7 +34,10 @@ END = START + timedelta(days=2)
 def reset_fixtures() -> None:
     result = subprocess.run(
         [sys.executable, "-m", "mockfastapi.cli", "reset"],
-        env=os.environ.copy(), capture_output=True, text=True, check=False,
+        env=os.environ.copy(),
+        capture_output=True,
+        text=True,
+        check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -46,23 +49,39 @@ async def test_create_modify_and_approve(isolated_settings: None) -> None:
     sessions = get_session()
     try:
         session = await anext(sessions)
-        leave = await create_leave(session, ALICE, LeaveCreate(
-            days=Decimal("2"), leave_type="annual", start_at=START,
-            end_at=END, approver_id=BOB.id, reason="Travel",
-        ))
+        leave = await create_leave(
+            session,
+            ALICE,
+            LeaveCreate(
+                days=Decimal("2"),
+                leave_type="annual",
+                start_at=START,
+                end_at=END,
+                approver_id=BOB.id,
+                reason="Travel",
+            ),
+        )
         assert leave.applicant_id == ALICE.id
         assert leave.status == "pending"
         assert leave.days == Decimal("2.00")
         leave_id = leave.id
         session.expire(leave)
         shifted = START + timedelta(days=1)
-        await update_leave(session, ALICE, leave_id, LeavePatch(
-            reason="Family travel", start_at=shifted,
-        ))
+        await update_leave(
+            session,
+            ALICE,
+            leave_id,
+            LeavePatch(
+                reason="Family travel",
+                start_at=shifted,
+            ),
+        )
         await decide_leave(session, BOB, leave_id, LeaveDecision(decision="approved"))
         saved = await get_leave(session, ALICE, leave_id)
         assert (saved.status, saved.decision, saved.reason) == (
-            "approved", "approved", "Family travel",
+            "approved",
+            "approved",
+            "Family travel",
         )
         assert LeaveOut.model_validate(saved).start_at == shifted
         assert saved.decided_at is not None
@@ -95,10 +114,18 @@ async def test_visibility_and_approver_acl(isolated_settings: None) -> None:
             await decide_leave(session, ALICE, 1001, LeaveDecision(decision="approved"))
         assert forbidden.value.code == "forbidden"
         with pytest.raises(LeaveError) as bad_approver:
-            await create_leave(session, ALICE, LeaveCreate(
-                days=Decimal("1"), leave_type="annual", start_at=START,
-                end_at=END, approver_id=CAROL.id, reason="Travel",
-            ))
+            await create_leave(
+                session,
+                ALICE,
+                LeaveCreate(
+                    days=Decimal("1"),
+                    leave_type="annual",
+                    start_at=START,
+                    end_at=END,
+                    approver_id=CAROL.id,
+                    reason="Travel",
+                ),
+            )
         assert bad_approver.value.code == "invalid_input"
         assert (await decide_leave(session, LEO, 1001, LeaveDecision(decision="rejected"))).status == "rejected"
     finally:

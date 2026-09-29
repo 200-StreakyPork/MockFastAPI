@@ -11,8 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from mockfastapi.auth.schemas import Principal, TokenResponse
 from mockfastapi.auth.service import (
-    AuthError, authenticate_client, introspect, issue_password_tokens, logout,
-    principal_for_access, refresh_tokens, revoke_token,
+    AuthError,
+    authenticate_client,
+    introspect,
+    issue_password_tokens,
+    logout,
+    principal_for_access,
+    refresh_tokens,
+    revoke_token,
 )
 from mockfastapi.cache import get_redis
 from mockfastapi.config import Settings
@@ -63,15 +69,16 @@ async def _json_body(request: Request) -> dict[str, str]:
 
 @router.post("/oauth/token", response_model=TokenResponse)
 async def token(
-    request: Request, response: Response, session: AsyncSession = Depends(get_session),
+    request: Request,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
     redis: Redis = Depends(redis_client),
 ) -> TokenResponse:
     _basic_client(request)
     body = await _json_body(request)
     grant = body.get("grant_type")
     if grant == "password":
-        pair = await issue_password_tokens(session, redis, body.get("username", ""),
-                                           body.get("password", ""))
+        pair = await issue_password_tokens(session, redis, body.get("username", ""), body.get("password", ""))
     elif grant == "refresh_token":
         pair = await refresh_tokens(redis, body.get("refresh_token", ""))
     else:
@@ -90,9 +97,7 @@ async def revoke(request: Request, redis: Redis = Depends(redis_client)) -> Resp
 
 
 @router.post("/oauth/introspect")
-async def token_introspection(
-    request: Request, redis: Redis = Depends(redis_client)
-) -> dict[str, bool | int | str]:
+async def token_introspection(request: Request, redis: Redis = Depends(redis_client)) -> dict[str, bool | int | str]:
     _basic_client(request)
     body = await _json_body(request)
     return await introspect(redis, body.get("token", ""))

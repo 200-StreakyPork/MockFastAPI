@@ -42,10 +42,16 @@ async def call(headers, name, arguments):
 
 
 async def main():
-    login = await call({}, "sso_login", {
-        "client_id": "test-client", "client_secret": "test-secret",
-        "username": "alice", "password": "TestPass123!",
-    })
+    login = await call(
+        {},
+        "sso_login",
+        {
+            "client_id": "test-client",
+            "client_secret": "test-secret",
+            "username": "alice",
+            "password": "TestPass123!",
+        },
+    )
     token = login.structuredContent["access_token"]
     people = await call({"Authorization": f"Bearer {token}"}, "list_people", {})
     print(people.structuredContent["people"])

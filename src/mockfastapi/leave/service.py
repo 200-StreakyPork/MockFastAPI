@@ -54,7 +54,11 @@ async def create_leave(session: AsyncSession, actor: Principal, data: LeaveCreat
 
 
 async def list_leaves(
-    session: AsyncSession, actor: Principal, status: str | None, limit: int, offset: int,
+    session: AsyncSession,
+    actor: Principal,
+    status: str | None,
+    limit: int,
+    offset: int,
 ) -> list[Leave]:
     query = select(Leave)
     if actor.role != "admin":
@@ -73,7 +77,10 @@ async def get_leave(session: AsyncSession, actor: Principal, leave_id: int) -> L
 
 
 async def update_leave(
-    session: AsyncSession, actor: Principal, leave_id: int, data: LeavePatch,
+    session: AsyncSession,
+    actor: Principal,
+    leave_id: int,
+    data: LeavePatch,
 ) -> Leave:
     try:
         leave = await get_leave(session, actor, leave_id)
@@ -101,7 +108,10 @@ async def update_leave(
 
 
 async def decide_leave(
-    session: AsyncSession, actor: Principal, leave_id: int, data: LeaveDecision,
+    session: AsyncSession,
+    actor: Principal,
+    leave_id: int,
+    data: LeaveDecision,
 ) -> Leave:
     try:
         leave = await get_leave(session, actor, leave_id)
