@@ -1,5 +1,7 @@
 """FastAPI application factory."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -12,12 +14,21 @@ from mockfastapi.cache import get_redis
 from mockfastapi.db import get_session
 from mockfastapi.leave.http import router as leave_router
 from mockfastapi.leave.service import LeaveError
+from mockfastapi.mcp_server import create_mcp_server
 from mockfastapi.people.http import router as people_router
 
 
 def create_app() -> FastAPI:
     """Create the mock service application."""
-    app = FastAPI(title="MockFastAPI")
+    mcp = create_mcp_server()
+    mcp_app = mcp.streamable_http_app()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        async with mcp.session_manager.run():
+            yield
+
+    app = FastAPI(title="MockFastAPI", lifespan=lifespan)
 
     @app.exception_handler(AuthError)
     async def auth_error(_request, error: AuthError) -> JSONResponse:
@@ -84,4 +95,5 @@ def create_app() -> FastAPI:
             status_code=503,
         )
 
+    app.mount("/", mcp_app)
     return app
