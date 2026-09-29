@@ -10,6 +10,8 @@
 
 **设计依据：** `docs/superpowers/specs/2026-09-28-mock-agent-services-design.md`
 
+**范围调整（2026-09-29）：** 用户明确要求本测试 Mock 工程聚焦常见流程，无需针对少见异常、并发竞争和边界输入增加专项处理或测试。保留设计中的基本业务规则、ACL、常规错误响应及 HTTP/MCP 主流程；发生范围冲突时以此调整为准。
+
 ## 全局约束
 
 - 本项目只用于本地及受控测试环境；OAuth2 `password` grant 仅用于此目的，文档须明确说明其不适用于真实 SSO。
@@ -18,15 +20,15 @@
 - 预置约 12 名稳定的测试人员，覆盖至少三个部门及员工、主管、HR、管理员角色。显式 CLI 重置命令恢复确定的人员和样例单据。
 - 访问令牌有效期为 30 分钟，刷新令牌有效期为 7 天；刷新时轮换令牌，登出时撤销整个会话。
 - API 时间必须带时区，入库时使用 UTC。`days` 由调用方提供，必须是正十进制数，不计算日历天数。
-- 使用少量针对常见流程的测试和一个冒烟脚本，不建立庞大的单测矩阵。
+- 使用少量针对常见流程的测试和一个冒烟脚本；不建立边界条件或少见异常的测试矩阵。
 
 ## 审查重点
 
-1. 刷新令牌轮换后再次使用必须返回 `invalid_grant`；由任务 3 的刷新测试验证。
-2. 用户即使知道无权查看的单据 ID，也只能收到 `404`，不能获得单据详情；由任务 4 的 ACL 测试和任务 5 的 HTTP 测试验证。
-3. 无时区时间，以及结束时间早于开始时间的输入，必须在入库前被拒绝；由任务 4 的校验测试验证。
-4. 申请人将自己指定为审批人时必须被拒绝；由任务 4 的创建测试验证。
-5. 终态单据再次修改、审批或撤回时必须返回 `409`；由任务 4 的状态转换测试验证。
+1. 账号登录、令牌续期和登出可连续走通；由任务 3 的认证流程测试验证。
+2. 申请人、指定审批人和管理员获得预期权限，无关用户不能操作单据；由任务 4、5 的 ACL 测试验证。
+3. 创建、修改、审批和撤回的常见状态流程可走通；由任务 4、5 的流程测试验证。
+4. 固定人员和样例单据可在手动重置后恢复；由任务 2 的初始化测试验证。
+5. HTTP 与 MCP 调用同一业务规则；由任务 6 的对照测试验证。
 
 ---
 
@@ -71,13 +73,15 @@
 
 ### 任务 3：OAuth 令牌生命周期与身份识别
 
+2026-09-29 用户批准的接口调整：`/oauth/token`、`/oauth/revoke`、`/oauth/introspect` 的 HTTP 请求体只接受 JSON，不保留表单编码兼容。以下验收描述按此调整；服务层及 MCP 工具调用不变。
+
 **文件：** 新建 `src/mockfastapi/auth/{__init__,schemas,service,http}.py`、`tests/test_auth.py`；修改 `src/mockfastapi/app.py`、`src/mockfastapi/config.py`。
 
 **接口：** 在 `schemas.py` 提供 `Principal(id: int, username: str, role: str)` 和 `TokenPair(access_token: str, refresh_token: str, expires_in: int)`。服务函数为 `authenticate_client(client_id: str, client_secret: str, settings: Settings) -> None`、`async issue_password_tokens(session: AsyncSession, redis: Redis, username: str, password: str) -> TokenPair`、`async refresh_tokens(redis: Redis, refresh_token: str) -> TokenPair`、`async principal_for_access(redis: Redis, token: str) -> Principal`、`async revoke_token(redis: Redis, token: str) -> None`、`async logout(redis: Redis, token: str) -> None`、`async introspect(redis: Redis, token: str) -> dict[str, bool | int | str]`。HTTP 和 MCP 在执行密码登录、刷新、撤销或令牌校验前，均须认证预置测试客户端。无效授权与凭据映射为明确的领域异常。HTTP 路由为 `/oauth/token`、`/oauth/revoke`、`/oauth/introspect`、`/auth/me`、`/auth/logout`。
 
-- [ ] **步骤 1：在 `tests/test_auth.py` 编写 `test_password_refresh_replay_logout` 和 `test_client_and_user_credentials`。** 断言表单令牌响应为 Bearer，且 `expires_in=1800`；刷新返回新令牌对，即使两个刷新请求竞争，旧刷新令牌也只能成功使用一次；登出后新访问令牌失效；错误的客户端或用户凭据不能获得令牌。
+- [ ] **步骤 1：在 `tests/test_auth.py` 编写 `test_password_refresh_replay_logout` 和 `test_client_and_user_credentials`。** 断言 JSON 请求签发的令牌响应为 Bearer，且 `expires_in=1800`；刷新返回新令牌对，旧刷新令牌不可再用；登出后新访问令牌失效；错误的客户端或用户凭据不能获得令牌。
 - [ ] **步骤 2：运行 `uv run pytest tests/test_auth.py -v`。** 应因路由尚不存在而失败。
-- [ ] **步骤 3：实现 Schema、Redis 会话与令牌映射、Argon2 密码校验、Basic 客户端认证及 OAuth HTTP 路由。** 使用 Redis 事务或 Lua 脚本原子地消耗刷新令牌，避免并发重放签发两组令牌。Redis TTL 分别为 30 分钟和 7 天；业务错误返回稳定的 `code` 和 `message`。
+- [ ] **步骤 3：实现 Schema、Redis 会话与令牌映射、Argon2 密码校验、Basic 客户端认证及 OAuth HTTP 路由。** 刷新时让旧令牌失效并签发新令牌对。Redis TTL 分别为 30 分钟和 7 天；业务错误返回稳定的 `code` 和 `message`。
 - [ ] **步骤 4：运行 `uv run pytest tests/test_auth.py -v`。** 所有认证测试应通过。
 - [ ] **步骤 5：提交。** 执行 `git add src/mockfastapi/auth src/mockfastapi/app.py src/mockfastapi/config.py tests/test_auth.py` 和 `git commit -m "feat: implement mock OAuth token lifecycle"`。
 
@@ -87,7 +91,7 @@
 
 **接口：** 提供 Pydantic Schema `LeaveCreate`、`LeavePatch`、`LeaveDecision`、`LeaveOut`。服务函数为 `async create_leave(session: AsyncSession, actor: Principal, data: LeaveCreate) -> Leave`、`async list_leaves(session: AsyncSession, actor: Principal, status: str | None, limit: int, offset: int) -> list[Leave]`、`async get_leave(session: AsyncSession, actor: Principal, leave_id: int) -> Leave`、`async update_leave(session: AsyncSession, actor: Principal, leave_id: int, data: LeavePatch) -> Leave`、`async decide_leave(session: AsyncSession, actor: Principal, leave_id: int, data: LeaveDecision) -> Leave`、`async withdraw_leave(session: AsyncSession, actor: Principal, leave_id: int) -> Leave`。共享领域异常表示无效输入、无权操作、记录不存在或不可见，以及状态冲突。
 
-- [ ] **步骤 1：编写聚焦的服务测试。** `test_create_rejects_self_approver_and_invalid_time` 检查自我审批、无时区时间和时间倒置；`test_visibility_and_approver_acl` 检查只有申请人、指定审批人及管理员可见，且无权查看的 ID 返回未找到；`test_terminal_transitions_conflict` 检查终态单据再次修改、审批或撤回时发生冲突。
+- [ ] **步骤 1：编写聚焦的服务测试。** `test_create_modify_and_approve` 检查普通创建、修改与审批；`test_visibility_and_approver_acl` 检查申请人、指定审批人、管理员与无关人员的权限；`test_withdraw_pending_leave` 检查待审批单据的撤回。无需为无时区时间、自我审批或重复终态操作另写专项边界测试。
 - [ ] **步骤 2：运行 `uv run pytest tests/test_leave_service.py -v`。** 应因服务尚不存在而失败。
 - [ ] **步骤 3：实现 Schema、数据校验、ACL 和状态转换。** 申请人来自 `Principal`；审批人必须是主管或 HR；`days > 0`；时间按 UTC 入库；只有 `pending` 状态可修改。每次变更使用一个数据库事务。
 - [ ] **步骤 4：运行 `uv run pytest tests/test_leave_service.py -v`。** 所有假勤服务测试应通过。

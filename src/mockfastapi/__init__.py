@@ -1,0 +1,1 @@
+"""MockFastAPI service package."""

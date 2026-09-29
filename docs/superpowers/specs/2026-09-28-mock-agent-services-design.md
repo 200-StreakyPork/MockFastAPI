@@ -6,6 +6,10 @@
 
 首期交付一个 Python 3.12、uv 管理依赖的 FastAPI 服务。现有本地 Docker MySQL（`mysql-local-test:3306`）保存人员和单据，Redis（`redis-local-test:6379`）保存令牌状态。服务无需网页界面、复杂组织架构或完整生产级 SSO。
 
+范围调整（2026-09-29）：按用户补充要求，本测试 Mock 以常见业务流程为验收重点，不为少见异常、并发竞争或边界输入增加专项处理与测试。基本业务规则、ACL 和常规错误响应仍按下文执行。
+
+请求体调整（2026-09-29）：按用户批准，三个 HTTP OAuth 端点只接受 `application/json` 请求体；不兼容先前设计的表单编码。Basic 客户端认证及业务 Bearer 认证保持原样。
+
 ## 系统结构
 
 一个 ASGI 进程包含四个边界清晰的模块：
@@ -25,9 +29,9 @@ HTTP 路由和 MCP 工具调用同一服务层。MySQL 使用独立的用户、�
 
 ### 令牌接口
 
-`POST /oauth/token` 接受表单编码请求，支持 `grant_type=password`（测试账号、密码）及 `grant_type=refresh_token`（刷新令牌）。预置一个测试 OAuth 客户端，`client_id` 和 `client_secret` 通过配置提供；HTTP 客户端使用 Basic 认证提交这组凭据。响应含 `access_token`、`token_type=Bearer`、`expires_in`、`refresh_token`。访问令牌默认有效 30 分钟，刷新令牌默认有效 7 天；刷新时轮换刷新令牌并使旧令牌失效。
+`POST /oauth/token` 接受 JSON 对象，支持 `grant_type=password`（测试账号、密码）及 `grant_type=refresh_token`（刷新令牌）。预置一个测试 OAuth 客户端，`client_id` 和 `client_secret` 通过配置提供；HTTP 客户端使用 Basic 认证提交这组凭据。响应含 `access_token`、`token_type=Bearer`、`expires_in`、`refresh_token`。访问令牌默认有效 30 分钟，刷新令牌默认有效 7 天；刷新时轮换刷新令牌并使旧令牌失效。
 
-`POST /oauth/revoke` 由测试 OAuth 客户端使用 Basic 认证，撤销指定令牌；`POST /auth/logout` 撤销当前会话的访问令牌及刷新令牌；`GET /auth/me` 返回当前人员；`POST /oauth/introspect` 由测试 OAuth 客户端使用 Basic 认证，返回令牌是否有效及关联人员信息，供测试系统做鉴权验证。业务接口通过 `Authorization: Bearer <access_token>` 获取身份。过期或撤销后立即拒绝访问。
+`POST /oauth/revoke` 和 `POST /oauth/introspect` 接受含 `token` 的 JSON 对象，由测试 OAuth 客户端使用 Basic 认证，分别撤销指定令牌、返回令牌是否有效及关联人员信息。`POST /auth/logout` 撤销当前会话的访问令牌及刷新令牌；`GET /auth/me` 返回当前人员。业务接口通过 `Authorization: Bearer <access_token>` 获取身份。过期或撤销后立即拒绝访问。
 
 用户名密码直接换令牌符合早期 OAuth2 `password` grant 定义，但现行 OAuth2 安全最佳实践禁止在真实系统使用。此功能仅为受控 Mock 测试满足 API 直连要求；README 必须明确这一限制。这里不声称提供 OpenID Connect、浏览器 SSO、授权码流程或生产级身份提供方。
 
