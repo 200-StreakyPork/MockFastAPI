@@ -49,7 +49,7 @@ uv run python -m mockfastapi.cli reset
 
 日常初始化可用 `uv run python -m mockfastapi.cli seed`，只补齐缺失的固定样本。`reset` 会删除当前配置库中的人员与请假数据，并清除当前 Redis DB 中 `mockfastapi:*` 键，然后重建固定样本；执行前确认 URL 指向可重置的 Mock 环境。迁移针对 `DATABASE_URL`，`seed` 和 `reset` 也使用当前 `DATABASE_URL` 与 `REDIS_URL`。
 
-固定用户包括 `alice`（员工）、`bob`（主管）、`carol`、`frank`（主管）、`kate`（HR）和 `leo`（管理员），共 12 人；密码均为 `TestPass123!`。初始请假单有 `1001` 至 `1004`。预置 OAuth 客户端为 `test-client` / `test-secret`，可通过 `OAUTH_CLIENT_ID` 和 `OAUTH_CLIENT_SECRET` 覆盖。OAuth 的 `password` grant 仅用于本地测试，不适合作为生产登录方案。
+固定用户包括 `alice`（员工）、`bob`（主管）、`carol`、`frank`（主管）、`kate`（HR）和 `leo`（管理员），共 12 人；密码均为 `TestPass123!`。初始请假单有 `1001` 至 `1004`。预置 OAuth 客户端为 `test-client` / `test-secret`，可通过 `OAUTH_CLIENT_ID` 和 `OAUTH_CLIENT_SECRET` 覆盖。新签发的 access token 有效期为 24 小时（`expires_in=86400` 秒），refresh token 有效期为 7 天；后者可在不重新输入用户密码的情况下换取新的令牌对，旧令牌对随刷新失效。OAuth 的 `password` grant 仅用于本地测试，不适合作为生产登录方案。
 
 ## 启动与检查
 

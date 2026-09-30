@@ -29,7 +29,7 @@ HTTP 路由和 MCP 工具调用同一服务层。MySQL 使用独立的用户、�
 
 ### 令牌接口
 
-`POST /oauth/token` 接受 JSON 对象，支持 `grant_type=password`（测试账号、密码）及 `grant_type=refresh_token`（刷新令牌）。预置一个测试 OAuth 客户端，`client_id` 和 `client_secret` 通过配置提供；HTTP 客户端使用 Basic 认证提交这组凭据。响应含 `access_token`、`token_type=Bearer`、`expires_in`、`refresh_token`。访问令牌默认有效 30 分钟，刷新令牌默认有效 7 天；刷新时轮换刷新令牌并使旧令牌失效。
+`POST /oauth/token` 接受 JSON 对象，支持 `grant_type=password`（测试账号、密码）及 `grant_type=refresh_token`（刷新令牌）。预置一个测试 OAuth 客户端，`client_id` 和 `client_secret` 通过配置提供；HTTP 客户端使用 Basic 认证提交这组凭据。响应含 `access_token`、`token_type=Bearer`、`expires_in`、`refresh_token`。按 2026-09-30 用户调整，新签发访问令牌有效 24 小时，刷新令牌有效 7 天；刷新时轮换刷新令牌并使旧令牌失效。
 
 `POST /oauth/revoke` 和 `POST /oauth/introspect` 接受含 `token` 的 JSON 对象，由测试 OAuth 客户端使用 Basic 认证，分别撤销指定令牌、返回令牌是否有效及关联人员信息。`POST /auth/logout` 撤销当前会话的访问令牌及刷新令牌；`GET /auth/me` 返回当前人员。业务接口通过 `Authorization: Bearer <access_token>` 获取身份。过期或撤销后立即拒绝访问。
 

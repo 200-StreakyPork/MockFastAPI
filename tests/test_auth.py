@@ -82,7 +82,7 @@ async def test_password_refresh_replay_logout(isolated_settings: None) -> None:
         assert login.headers["Pragma"] == "no-cache"
         first = login.json()
         assert first["token_type"] == "Bearer"
-        assert first["expires_in"] == 1800
+        assert first["expires_in"] == 86400
         me = await client.get("/auth/me", headers={"Authorization": f"Bearer {first['access_token']}"})
         assert me.status_code == 200, me.text
         assert me.json() == {"id": 1, "username": "alice", "role": "employee"}
@@ -99,6 +99,7 @@ async def test_password_refresh_replay_logout(isolated_settings: None) -> None:
         assert refreshed.headers["Cache-Control"] == "no-store"
         assert refreshed.headers["Pragma"] == "no-cache"
         second = refreshed.json()
+        assert second["expires_in"] == 86400
         assert second["access_token"] != first["access_token"]
         assert second["refresh_token"] != first["refresh_token"]
         replay = await client.post(

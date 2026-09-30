@@ -18,7 +18,7 @@
 - 全面使用 `leave` 命名：HTTP 集合路径为 `/leaves`，路径参数为 `leave_id`，MCP 工具为 `create_leave`、`list_leaves`、`get_leave`、`update_leave`、`decide_leave`、`withdraw_leave`。
 - 一个 FastAPI 应用提供 `/docs`、`/openapi.json` 和 Streamable HTTP `/mcp`；无需网页界面。
 - 预置约 12 名稳定的测试人员，覆盖至少三个部门及员工、主管、HR、管理员角色。显式 CLI 重置命令恢复确定的人员和样例单据。
-- 访问令牌有效期为 30 分钟，刷新令牌有效期为 7 天；刷新时轮换令牌，登出时撤销整个会话。
+- 按 2026-09-30 用户调整，访问令牌有效期为 24 小时，刷新令牌有效期为 7 天；刷新时轮换令牌，登出时撤销整个会话。
 - API 时间必须带时区，入库时使用 UTC。`days` 由调用方提供，必须是正十进制数，不计算日历天数。
 - 使用少量针对常见流程的测试和一个冒烟脚本；不建立边界条件或少见异常的测试矩阵。
 
@@ -79,9 +79,9 @@
 
 **接口：** 在 `schemas.py` 提供 `Principal(id: int, username: str, role: str)` 和 `TokenPair(access_token: str, refresh_token: str, expires_in: int)`。服务函数为 `authenticate_client(client_id: str, client_secret: str, settings: Settings) -> None`、`async issue_password_tokens(session: AsyncSession, redis: Redis, username: str, password: str) -> TokenPair`、`async refresh_tokens(redis: Redis, refresh_token: str) -> TokenPair`、`async principal_for_access(redis: Redis, token: str) -> Principal`、`async revoke_token(redis: Redis, token: str) -> None`、`async logout(redis: Redis, token: str) -> None`、`async introspect(redis: Redis, token: str) -> dict[str, bool | int | str]`。HTTP 和 MCP 在执行密码登录、刷新、撤销或令牌校验前，均须认证预置测试客户端。无效授权与凭据映射为明确的领域异常。HTTP 路由为 `/oauth/token`、`/oauth/revoke`、`/oauth/introspect`、`/auth/me`、`/auth/logout`。
 
-- [ ] **步骤 1：在 `tests/test_auth.py` 编写 `test_password_refresh_replay_logout` 和 `test_client_and_user_credentials`。** 断言 JSON 请求签发的令牌响应为 Bearer，且 `expires_in=1800`；刷新返回新令牌对，旧刷新令牌不可再用；登出后新访问令牌失效；错误的客户端或用户凭据不能获得令牌。
+- [ ] **步骤 1：在 `tests/test_auth.py` 编写 `test_password_refresh_replay_logout` 和 `test_client_and_user_credentials`。** 断言 JSON 请求签发的令牌响应为 Bearer，且 `expires_in=86400`；刷新返回新令牌对，旧刷新令牌不可再用；登出后新访问令牌失效；错误的客户端或用户凭据不能获得令牌。
 - [ ] **步骤 2：运行 `uv run pytest tests/test_auth.py -v`。** 应因路由尚不存在而失败。
-- [ ] **步骤 3：实现 Schema、Redis 会话与令牌映射、Argon2 密码校验、Basic 客户端认证及 OAuth HTTP 路由。** 刷新时让旧令牌失效并签发新令牌对。Redis TTL 分别为 30 分钟和 7 天；业务错误返回稳定的 `code` 和 `message`。
+- [ ] **步骤 3：实现 Schema、Redis 会话与令牌映射、Argon2 密码校验、Basic 客户端认证及 OAuth HTTP 路由。** 刷新时让旧令牌失效并签发新令牌对。Redis TTL 分别为 24 小时和 7 天；业务错误返回稳定的 `code` 和 `message`。
 - [ ] **步骤 4：运行 `uv run pytest tests/test_auth.py -v`。** 所有认证测试应通过。
 - [ ] **步骤 5：提交。** 执行 `git add src/mockfastapi/auth src/mockfastapi/app.py src/mockfastapi/config.py tests/test_auth.py` 和 `git commit -m "feat: implement mock OAuth token lifecycle"`。
 

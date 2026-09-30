@@ -12,7 +12,7 @@ from mockfastapi.auth.schemas import Principal, TokenPair
 from mockfastapi.config import Settings
 from mockfastapi.people.models import Person
 
-ACCESS_TTL = 30 * 60
+ACCESS_TTL = 24 * 60 * 60
 REFRESH_TTL = 7 * 24 * 60 * 60
 PREFIX = "mockfastapi:"
 
